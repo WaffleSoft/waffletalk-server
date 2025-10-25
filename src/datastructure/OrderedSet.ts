@@ -7,13 +7,15 @@ export type Node<R extends Replicable> = Head<R> | Bucket<R>;
 export class OrderedSet<R extends Replicable> {
     readonly comparator: (a: R, b: R) => number;
     readonly p: number;
+    readonly maxBucketSize: number;
     private head: Head<R>;
     private bucketMap: Map<Snowflake, Bucket<R>>;
 
-    constructor(comparator: (a: R, b: R) => number, p: number = 0.5) {
-        this.comparator = comparator;
-        this.p = p;
-        this.head = { nextLink: [new Bucket(this.comparator)] };
+    constructor({ comparator, p, maxBucketSize }: Partial<{ comparator: (a: R, b: R) => number, p: number, maxBucketSize: number }>) {
+        this.comparator = comparator ?? (() => 0);
+        this.p = p ?? 0.5;
+        this.maxBucketSize = maxBucketSize ?? 64;
+        this.head = { nextLink: [new Bucket(this)] };
         this.bucketMap = new Map();
     }
 
@@ -21,12 +23,20 @@ export class OrderedSet<R extends Replicable> {
         return this.bucketMap.get(id)?.members.find((m) => m.id === id);
     }
 
+    lt(a: R, b: R) {
+        return this.comparator(a, b) < 0;
+    }
+
+    leq(a: R, b: R) {
+        return this.comparator(a, b) <= 0;
+    }
+
     add(value: R) {
         if (this.bucketMap.has(value.id)) return;
         const [bucket, path] = this.fit(value);
         bucket.add(value);
         this.bucketMap.set(value.id, bucket);
-        while (bucket.size > Bucket.MAX_SIZE) this.splitBucket(bucket, path);
+        while (bucket.size > this.maxBucketSize) this.splitBucket(bucket, path);
     }
 
     remove(value: R) {
@@ -40,18 +50,23 @@ export class OrderedSet<R extends Replicable> {
     fit(value: R): [Bucket<R>, Node<R>[]] {
         const path: Node<R>[] = new Array(this.size);
         let bucket: Bucket<R> = this.head.nextLink[this.size - 1];
+        if (bucket.size < 1) {
+            bucket.add(value);
+            path.fill(bucket);
+            return [bucket, path];
+        }
         for (let rank = this.size - 1; rank >= 0; rank--) {
-            while (!bucket.fits(value)) bucket = bucket.nextLink[rank]!;
+            while (this.lt(bucket.max!, value)) bucket = bucket.nextLink[rank]!;
             path[rank] = bucket;
         }
         return [bucket, path];
     }
 
     splitBucket(bucket: Bucket<R>, path: Node<R>[]) {
-        const upper = new Bucket(this.comparator);
-    
+        const upper = new Bucket(this);
+
         // Members are reassigned to the new Bucket.
-        upper.members = bucket.members.splice(-Math.min(Math.floor(bucket.members.length / 2), Bucket.MAX_SIZE));
+        upper.members = bucket.members.splice(-Math.min(Math.floor(bucket.members.length / 2), this.maxBucketSize));
         bucket.emit(
             new BucketMutation(
                 bucket,
@@ -90,22 +105,10 @@ export class OrderedSet<R extends Replicable> {
             bucket.nextLink.push(null);
             bucket.prevLink.push(this.head);
         }
-
-        // ID references in replicable's data are updated.
-        bucket.replicable.data.nx = bucket.next?.id ?? null;
-        upper.replicable.data.pv = upper.prev?.id ?? null;
-        upper.replicable.data.nx = upper.next?.id ?? null;
-        if (upper.next !== null) upper.next.replicable.data.pv = upper.id;
     }
 
     unlinkBucket(bucket: Bucket<R>) {
         if (bucket.size > 0) throw "cannot unlink non-empty Bucket";
-
-        // ID references in replicable's data are updated.
-        if (bucket.prev !== null) bucket.prev.replicable.data.nx = bucket.prev?.id ?? null;
-        if (bucket.next !== null) bucket.next.replicable.data.pv = bucket.next?.id ?? null;
-
-        // Links are removed within the skip list.
         for (let rank = 0; rank < bucket.nextLink.length; rank++) {
             bucket.prevLink[rank].nextLink[rank] = bucket.nextLink[rank];
             if (bucket.nextLink[rank] !== null) bucket.nextLink[rank]!.prevLink[rank] = bucket.prevLink[rank];
