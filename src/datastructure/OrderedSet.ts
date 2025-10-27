@@ -11,7 +11,7 @@ export class OrderedSet<R extends Replicable> {
     private head: Head<R>;
     private bucketMap: Map<Snowflake, Bucket<R>>;
 
-    constructor({ comparator, p, maxBucketSize }: Partial<{ comparator: (a: R, b: R) => number, p: number, maxBucketSize: number }>) {
+    constructor(comparator: (a: R, b: R) => number, { p, maxBucketSize }: Partial<{ p: number, maxBucketSize: number }> = {}) {
         this.comparator = comparator ?? (() => 0);
         this.p = p ?? 0.5;
         this.maxBucketSize = maxBucketSize ?? 64;
