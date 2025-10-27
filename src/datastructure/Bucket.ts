@@ -1,9 +1,9 @@
 import { Replicable, ReplicableMutation } from "./Replicable";
 import { Node, OrderedSet } from "./OrderedSet";
-import { EventRouter } from "../events/EventRouter";
-import { ClientEvent } from "../events/ClientEvent";
+import { SignalRouter } from "../signals/SignalRouter";
+import { SocketSignal } from "../signals/SocketSignal";
 
-export class BucketMutation<R extends Replicable> extends ClientEvent<"bucket.mutation"> {
+export class BucketShift<R extends Replicable> extends SocketSignal<"bucket.shift"> {
     constructor(
         public readonly bucket: Bucket<R>,
         public readonly add: R[],
@@ -12,9 +12,9 @@ export class BucketMutation<R extends Replicable> extends ClientEvent<"bucket.mu
         super();
     }
 
-    toJSON(): WS.Events["bucket.mutation"] {
+    toJSON(): WS.Events["bucket.shift"] {
         return {
-            event: "bucket.mutation",
+            event: "bucket.shift",
             data: {
                 id: this.bucket.id,
                 add: this.add,
@@ -24,37 +24,55 @@ export class BucketMutation<R extends Replicable> extends ClientEvent<"bucket.mu
     }
 }
 
-export class Bucket<R extends Replicable> extends EventRouter<BucketMutation<R> | ReplicableMutation<R["data"]>> {
+class MutationTrap<R extends Replicable> extends SignalRouter<ReplicableMutation<R>> {
+    constructor(private bucket: Bucket<R>) {
+        super();
+    }
+
+    on(signal: ReplicableMutation<R>) {
+        if (this.bucket.set.leq(this.bucket.min!, signal.replicable)
+         && this.bucket.set.leq(signal.replicable, this.bucket.max!)) {
+            this.emit(signal);
+        } else {
+            this.bucket.set.remove(signal.value);
+            this.bucket.set.add(signal.value);
+        }
+    }
+}
+
+export class Bucket<R extends Replicable> extends SignalRouter<BucketShift<R> | ReplicableMutation<R>> {
     static counter = 0;
 
     readonly id = (++Bucket.counter).toString(16);
     readonly nextLink: (Bucket<R> | null)[] = [];
     readonly prevLink: Node<R>[] = [];
+    readonly mutations = new MutationTrap(this);
     members: R[] = [];
 
     constructor(
         readonly set: OrderedSet<R>
     ) {
         super();
+        this.addSource(this.mutations);
     }
 
     add(value: R) {
         if (this.size < 1 || this.set.leq(this.max!, value)) this.members.push(value);
         else this.members.splice(this.members.findIndex((v, i) => this.set.leq(v, value) && this.set.leq(value, this.members[i + 1])), 0, value);
         this.emit(
-            new BucketMutation(
+            new BucketShift(
                 this,
                 [value],
                 []
             )
         );
-        this.addSource(value);
+        this.mutations.addSource(value);
     }
 
     remove(value: R) {
-        this.removeSource(value);
+        this.mutations.removeSource(value);
         this.emit(
-            new BucketMutation(
+            new BucketShift(
                 this,
                 [],
                 [value]

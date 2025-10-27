@@ -4,7 +4,7 @@ import { readFileSync } from "fs";
 import { assert } from "./util/assert";
 import { MongoDBDriver } from "./database/mongodb/MongoDBDriver";
 import { DatabaseDriver } from "./database/DatabaseDriver";
-import { Client } from "./events/Client";
+import { Client } from "./signals/Client";
 import { User } from "./apiobject/User";
 
 async function main() {

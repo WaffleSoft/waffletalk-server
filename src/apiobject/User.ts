@@ -1,4 +1,4 @@
-import { Client } from "../events/Client";
+import { Client } from "../signals/Client";
 import { Replicable } from "../datastructure/Replicable";
 import { DatabaseDriver } from "../database/DatabaseDriver";
 

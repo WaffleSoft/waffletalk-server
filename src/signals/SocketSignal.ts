@@ -1,6 +1,6 @@
 import { Client } from "./Client";
 
-export abstract class ClientEvent<EventName extends keyof WS.Events = keyof WS.Events> {
+export abstract class SocketSignal<EventName extends keyof WS.Events = keyof WS.Events> {
     private json: string | null;
     readonly delivered: Set<Client>;
 

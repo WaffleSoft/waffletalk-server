@@ -126,15 +126,15 @@ export class MongoDBDriver extends DatabaseDriver {
         return user;
     }
 
-    emit(event: ReplicableMutation<ApiObject["data"]>) {
-        super.emit(event);
-        const namespace = MongoDBDriver.SchemaKey.get(event.replicable.constructor as Constructor<ApiObject>);
-        if (namespace === undefined) return console.error("unhandled mutation event on MongoDBDriver on " + event.replicable.constructor);
+    on(signal: ReplicableMutation<ApiObject>) {
+        super.emit(signal);
+        const namespace = MongoDBDriver.SchemaKey.get(signal.replicable.constructor as Constructor<ApiObject>);
+        if (namespace === undefined) return console.error("unhandled mutation event on MongoDBDriver on " + signal.replicable.constructor);
         this.queue.push({
             namespace,
             name: "updateOne",
-            filter: { _id: event.replicable.id },
-            update: { $set: { [event.property]: event.value } }
+            filter: { _id: signal.replicable.id },
+            update: { $set: { [signal.property]: signal.value } }
         });
     }
 

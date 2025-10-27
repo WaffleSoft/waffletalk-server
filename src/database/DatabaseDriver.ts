@@ -5,9 +5,9 @@ import { GuildMember } from "../apiobject/GuildMember";
 import { Message } from "../apiobject/Message";
 import { User } from "../apiobject/User";
 import { ReplicableMutation } from "../datastructure/Replicable";
-import { EventRouter } from "../events/EventRouter";
+import { SignalRouter } from "../signals/SignalRouter";
 
-export abstract class DatabaseDriver extends EventRouter<ReplicableMutation<ApiObject["data"]>> {
+export abstract class DatabaseDriver extends SignalRouter<ReplicableMutation<ApiObject>> {
     /**
      * Flush pending operations, if any are queued.
      * Should resolve immediately if driver has no queue.

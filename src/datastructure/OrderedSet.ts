@@ -1,4 +1,4 @@
-import { Bucket, BucketMutation } from "./Bucket";
+import { Bucket, BucketShift } from "./Bucket";
 import { Replicable } from "./Replicable";
 
 type Head<R extends Replicable> = { nextLink: [Bucket<R>, ...Bucket<R>[]] };
@@ -56,7 +56,7 @@ export class OrderedSet<R extends Replicable> {
             return [bucket, path];
         }
         for (let rank = this.size - 1; rank >= 0; rank--) {
-            while (this.lt(bucket.max!, value)) bucket = bucket.nextLink[rank]!;
+            while (bucket.nextLink[rank] !== null && this.lt(bucket.nextLink[rank]!.min!, value)) bucket = bucket.nextLink[rank]!;
             path[rank] = bucket;
         }
         return [bucket, path];
@@ -68,14 +68,14 @@ export class OrderedSet<R extends Replicable> {
         // Members are reassigned to the new Bucket.
         upper.members = bucket.members.splice(-Math.min(Math.floor(bucket.members.length / 2), this.maxBucketSize));
         bucket.emit(
-            new BucketMutation(
+            new BucketShift(
                 bucket,
                 [],
                 upper.members
             )
         );
         upper.emit(
-            new BucketMutation(
+            new BucketShift(
                 upper,
                 upper.members,
                 []

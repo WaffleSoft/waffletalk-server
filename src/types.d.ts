@@ -58,7 +58,7 @@ declare namespace WS {
     interface EventMap {
         "response": BaseEvent<Interaction[keyof Interaction]["response"]>;
         "replicable.mutation": BaseEvent<{ id: Snowflake, property: string, value: any }>;
-        "bucket.mutation": BaseEvent<{ id: Snowflake, add: Replicable[], remove: Snowflake[] }>;
+        "bucket.shift": BaseEvent<{ id: Snowflake, add: Replicable[], remove: Snowflake[] }>;
     }
     
 
