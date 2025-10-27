@@ -1,4 +1,4 @@
-import { ClientBulkWriteModel, Db, MongoClient } from "mongodb";
+import { ClientBulkWriteModel, Db, Long, MongoClient } from "mongodb";
 import bcrypt from "bcrypt";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -21,13 +21,13 @@ export class MongoDBDriver extends DatabaseDriver {
         .set(Message, "message")
         .set(User, "user");
 
+    private queue: ClientBulkWriteModel<Schemas>[] = [];
+    public readonly snowflake = SnowflakeGenerator();
+    private users: Map<Snowflake, User> = new Map();
+
     constructor(
         private client: MongoClient,
-        private db: Db = client.db("waffletalk"),
-        private queue: ClientBulkWriteModel<Schemas>[] = [],
-        public readonly snowflake = SnowflakeGenerator(),
-        private users: Map<Snowflake, User> = new Map(),
-        private guilds: Map<Snowflake, Guild> = new Map()
+        private db: Db = client.db("waffletalk")
     ) {
         super();
     }
@@ -38,7 +38,10 @@ export class MongoDBDriver extends DatabaseDriver {
         const client = new MongoClient(cfg.mongodb);
         await client.connect();
         const driver = new MongoDBDriver(client);
-        
+        for await (const userDoc of driver.collection("user").find()) {
+            const id = userDoc._id.toString();
+            driver.users.set(id, new User(driver, { id, username: userDoc.username }));
+        }
         return driver;
     }
 
@@ -53,7 +56,7 @@ export class MongoDBDriver extends DatabaseDriver {
             name
         });
         await this.collection("guild").insertOne({
-            _id: guild.id,
+            _id: Long.fromStringStrict(guild.id),
             name: guild.data.name
         });
         this.addSource(guild);
@@ -69,11 +72,11 @@ export class MongoDBDriver extends DatabaseDriver {
             guild
         });
         await this.collection("guildchannel").insertOne({
-            _id: channel.id,
+            _id: Long.fromStringStrict(channel.id),
             name,
             position,
             topic,
-            guildId: guild.id
+            guildId: Long.fromStringStrict(guild.id)
         });
         this.addSource(channel);
         return channel;
@@ -86,9 +89,9 @@ export class MongoDBDriver extends DatabaseDriver {
             user
         });
         await this.collection("guildmember").insertOne({
-            _id: member.id,
-            guildId: guild.id,
-            userId: user.id
+            _id: Long.fromStringStrict(member.id),
+            guildId: Long.fromStringStrict(guild.id),
+            userId: Long.fromStringStrict(user.id)
         });
         this.addSource(member);
         return member;
@@ -102,11 +105,11 @@ export class MongoDBDriver extends DatabaseDriver {
             channel
         });
         await this.collection("message").insertOne({
-            _id: message.id,
+            _id: Long.fromStringStrict(message.id),
             content,
             edited: null,
-            authorId: author.id,
-            channelId: channel.id
+            authorId: Long.fromStringStrict(author.id),
+            channelId: Long.fromStringStrict(channel.id)
         });
         this.addSource(message);
         return message;
@@ -118,7 +121,7 @@ export class MongoDBDriver extends DatabaseDriver {
             username
         });
         await this.collection("user").insertOne({
-            _id: user.id,
+            _id: Long.fromStringStrict(user.id),
             username,
             passhash: await bcrypt.hash(clienthash, 10)
         });
@@ -133,7 +136,7 @@ export class MongoDBDriver extends DatabaseDriver {
         this.queue.push({
             namespace,
             name: "updateOne",
-            filter: { _id: signal.replicable.id },
+            filter: { _id: Long.fromStringStrict(signal.replicable.id) },
             update: { $set: { [signal.property]: signal.value } }
         });
     }
@@ -146,7 +149,7 @@ export class MongoDBDriver extends DatabaseDriver {
         if (!(await bcrypt.compare(clienthash, userDoc.passhash))) throw "authentication failed";
         const token = randomBytes(32).toString("base64");
         this.collection("session").insertOne({
-            _id: this.snowflake(),
+            _id: Long.fromStringStrict(this.snowflake()),
             userId: userDoc._id,
             token
         });
@@ -165,8 +168,8 @@ export class MongoDBDriver extends DatabaseDriver {
         const sessionDocs = await sessionCur.toArray();
         if (sessionDocs.length !== 1 || sessionDocs[0].users.length !== 1) throw "authorization failed";
         const userDoc = sessionDocs[0].users[0];
-        let user = this.users.get(userDoc._id);
-        if (user === undefined) this.users.set(userDoc._id, user = new User(this, { id: userDoc._id, username: userDoc.username }));
+        let user = this.users.get(userDoc._id.toString());
+        if (user === undefined) this.users.set(userDoc._id.toString(), user = new User(this, { id: userDoc._id.toString(), username: userDoc.username }));
         return user;
     }
 

@@ -1,3 +1,5 @@
+import { Long } from "mongodb";
+
 interface SchemasNoId {
     "guild": {
         name: string;
@@ -6,28 +8,28 @@ interface SchemasNoId {
         name: string;
         position: number;
         topic: string | null;
-        guildId: Snowflake;
+        guildId: Long;
     };
     "guildmember": {
-        userId: Snowflake;
-        guildId: Snowflake;
+        userId: Long;
+        guildId: Long;
     };
     "message": {
-        authorId: Snowflake;
+        authorId: Long;
         content: string;
         edited: number | null;
-        channelId: Snowflake;
+        channelId: Long;
     };
     "user": {
         username: string;
         passhash: string;
     };
     "session": {
-        userId: string;
+        userId: Long;
         token: string;
     };
 }
 
 export type Schemas = {
-    [Schema in keyof SchemasNoId]: { _id: Snowflake } & SchemasNoId[Schema];
+    [Schema in keyof SchemasNoId]: { _id: Long } & SchemasNoId[Schema];
 }
